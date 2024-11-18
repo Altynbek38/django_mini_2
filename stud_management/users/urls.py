@@ -1,13 +1,6 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from . import views
-
-router = DefaultRouter()
-router.register(r"signup", views.RegisterViewSet)
+from django.urls import path
+from .views import UserRoleAssignView
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('login/', views.LoginViewSet.as_view(), name='login'),
-    path('refresh/', views.RefreshViewSet.as_view(), name='refresh')
+    path('role/', UserRoleAssignView.as_view(), 'user-role'),
 ]
-
