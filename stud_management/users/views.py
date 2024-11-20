@@ -1,21 +1,60 @@
-from rest_framework.views import APIView
+from rest_framework import generics
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 
+from students.models import Student
 from .permissions import isAdminPermission
+from .serializers import CustomUserSerializer
 from .models import User
 
-class UserRoleAssignView(APIView):
+class UserRoleAssignView(generics.UpdateAPIView):
     permission_classes = [isAdminPermission]
+    serializer_class = CustomUserSerializer
 
+    def get_object(self):
+        email = self.request.data.get('email')
+        try:
+            user = User.objects.get(email=email)
+            return user
+        except User.DoesNotExist:
+            raise Response({'error': 'User not found'}, status=404)
+
+    def perform_update(self, serializer):
+        user = self.get_object()
+        role = self.request.data.get('role')
+        
+        if not role:
+            raise Response({'error': 'Role is required'}, status=400)
+        
+        user.role = role
+        user.save()
+
+        if role == 'student':
+            if not Student.objects.filter(user=user).exists():
+                Student.objects.create(
+                    user=user,
+                    name=user.username,
+                    email=user.email,
+                )
+        
+        return Response({'message': 'Role assigned successfully!'}, status=200)
+
+
+class UserLogoutApiView(APIView):
 
     def post(self, request):
-        user_id = request.data.get('user_id')
-        role = request.data.get('role')
-
         try:
-            user = User.objects.get(id=user_id)
-            user.role = role
-            user.save()
-            return Response({'message': 'Role assigned successfully!'}, status=200)
-        except:
-            Response({'error': 'User not found'}, status=404)
+            refresh_token = request.data.get('refresh')
+
+            if not refresh_token:
+                return Response(
+                    {"error": "Refresh token is required"}, status=400
+                )
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except Exception as e:
+            return Response(
+                {"error": "Invalid or expired token"}, status=400
+            )
+    

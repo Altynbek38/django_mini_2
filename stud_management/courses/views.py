@@ -1,5 +1,6 @@
-from rest_framework import generics
-from rest_framework.exceptions import PermissionDenied, NotFound
+from rest_framework import generics, pagination
+from rest_framework.exceptions import PermissionDenied, NotFound, ValidationError
+from django_filters.rest_framework import DjangoFilterBackend   
 
 from users.permissions import isAdminPermission, isTeacherPermission
 from students.models import Student
@@ -18,6 +19,9 @@ course_create_view = CourseCreateApiView.as_view()
 class CourseListApiView(generics.ListAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
+    pagination_class = pagination.LimitOffsetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['name', 'description']
 
 course_list_view = CourseListApiView.as_view()
 
@@ -66,13 +70,21 @@ class EnrollmentListCreateApiView(generics.ListCreateAPIView):
         else:
             return Enrollment.objects.all()
         
-    def perform_create(self, serializer):
-        user = self.request.user
+def perform_create(self, serializer):
+    user = self.request.user
 
-        if user.role not in ['Admin', 'Teacher']:
-            raise PermissionDenied("You do not have permission to create enrollment.")
-        
-        serializer.save()
+    if user.role not in ['Admin', 'Teacher']:
+        raise PermissionDenied("You do not have permission to create enrollment.")
+    
+    student = serializer.validated_data.get('student')
+    course = serializer.validated_data.get('course')
+
+    if not Student.objects.filter(id=student.id).exists():
+        raise ValidationError("The student does not exist.")
+    if not Course.objects.filter(id=course.id).exists():
+        raise ValidationError("The course does not exist.")
+
+    serializer.save()
 
 enrollment_create_view = EnrollmentListCreateApiView.as_view()
 
