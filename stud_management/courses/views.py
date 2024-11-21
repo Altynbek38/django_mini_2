@@ -1,12 +1,17 @@
 from rest_framework import generics, pagination
 from rest_framework.exceptions import PermissionDenied, NotFound, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend   
+from django.core.cache import cache
+import logging
+import redis
 
 from users.permissions import isAdminPermission, isTeacherPermission
 from students.models import Student
 from .models import Course, Enrollment
 from .seriializers import CourseSerializer, EnrollmentSerializer
 
+logger = logging.getLogger(__name__)
+redis_instance = redis.StrictRedis(host='127.0.0.1', port=6379, db=1)
 
 class CourseCreateApiView(generics.CreateAPIView):
     queryset = Course.objects.all()
@@ -22,6 +27,20 @@ class CourseListApiView(generics.ListAPIView):
     pagination_class = pagination.LimitOffsetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['name', 'description']
+
+    def get_queryset(self):
+
+        cache_key = f"courses:list:{str(self.request.GET.urlencode)}"
+
+        cached_queryset = cache.get(cache_key)
+        if cached_queryset:
+            return cached_queryset
+        
+        queryset = super().get_queryset()
+        queryset = self.filter_queryset(queryset)
+
+        cache.set(cache_key, queryset, timeout=3600)
+        return queryset
 
 course_list_view = CourseListApiView.as_view()
 
@@ -58,6 +77,7 @@ class EnrollmentListCreateApiView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        logger.info(f"Fetching enrollments for user: {user.username}, role: {user.role}")
 
         if user.role == "Student":
             try:
@@ -69,6 +89,10 @@ class EnrollmentListCreateApiView(generics.ListCreateAPIView):
             return Enrollment.objects.filter(course__instructor=user)
         else:
             return Enrollment.objects.all()
+        
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        logger.info(f"New enrollment created: {instance}")
         
 def perform_create(self, serializer):
     user = self.request.user

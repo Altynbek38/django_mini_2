@@ -2,6 +2,7 @@ from rest_framework import generics
 
 from users.permissions import isAdminPermission, isTeacherPermission
 from students.models import Student
+from notifications.tasks import notify_grade_update
 from .models import Grade
 from .serializers import GradeSerializer
 
@@ -38,6 +39,13 @@ class GradeUpdateApiView(generics.UpdateAPIView):
     serializer_class = GradeSerializer
     permission_classes = [isAdminPermission | isTeacherPermission]
     lookup_field = 'pk'
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+
+        notify_grade_update.delay(instance.student.id, instance.course.name, instance.grade)
+        return instance
+
 
 grade_update_view = GradeUpdateApiView.as_view()
 
