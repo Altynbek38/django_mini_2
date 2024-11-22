@@ -45,16 +45,10 @@ class UserLogoutApiView(APIView):
 
     def post(self, request):
         try:
-            refresh_token = request.data.get('refresh')
-
-            if not refresh_token:
-                return Response(
-                    {"error": "Refresh token is required"}, status=400
-                )
+            refresh_token = request.data["refresh_token"]
             token = RefreshToken(refresh_token)
             token.blacklist()
+
+            return Response(status=205)
         except Exception as e:
-            return Response(
-                {"error": "Invalid or expired token"}, status=400
-            )
-    
+            return Response(status=400)
