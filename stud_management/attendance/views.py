@@ -1,6 +1,8 @@
 from rest_framework import generics
 from rest_framework.exceptions import PermissionDenied, NotFound
 import logging
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 from users.permissions import isAdminPermission, isTeacherPermission
 from students.models import Student
@@ -15,6 +17,14 @@ class AttendanceListCreateApiView(generics.ListCreateAPIView):
     serializer_class = AttendanceCreateSerializer
     permission_classes = [isAdminPermission | isTeacherPermission]
 
+    @swagger_auto_schema(
+        operation_description="Open a new Attendance.",
+        request_body=AttendanceCreateSerializer,
+        responses={201: openapi.Response(description="Attendance opened", schema=AttendanceCreateSerializer)}
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         instance = serializer.save()
 
@@ -28,6 +38,14 @@ class AttendanceaMarkApiView(generics.UpdateAPIView):
     queryset = Attendance.objects.all()
     serializer_class = AttendanceSerializer
     lookup_field = 'pk'
+
+    @swagger_auto_schema(
+        operation_description="Update the courses.",
+        responses={200: AttendanceSerializer},
+        request_body=AttendanceSerializer
+    )
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
 
 
     def perform_update(self, serializer):

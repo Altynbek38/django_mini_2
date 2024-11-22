@@ -23,7 +23,7 @@ import debug_toolbar
 
 schema_view = get_schema_view(
     openapi.Info(
-      title="Stuent Management System",
+      title="Student Management System",
       default_version='v1',
       description="WSP Uhudshennyi",
       terms_of_service="https://www.google.com/policies/terms/",

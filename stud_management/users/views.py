@@ -2,6 +2,8 @@ from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 from students.models import Student
 from .permissions import isAdminPermission
@@ -11,6 +13,14 @@ from .models import User
 class UserRoleAssignView(generics.UpdateAPIView):
     permission_classes = [isAdminPermission]
     serializer_class = CustomUserSerializer
+
+    @swagger_auto_schema(
+        operation_description="Update the courses.",
+        responses={200: CustomUserSerializer},
+        request_body=CustomUserSerializer
+    )
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
 
     def get_object(self):
         email = self.request.data.get('email')
@@ -42,7 +52,14 @@ class UserRoleAssignView(generics.UpdateAPIView):
 
 
 class UserLogoutApiView(APIView):
-
+    @swagger_auto_schema(
+        operation_description="Logout",
+        request_body=openapi.Schema(type=openapi.TYPE_OBJECT, required=['refresh_token']),
+        responses={
+            205: openapi.Response(description="Logged out successfully."),
+            400: openapi.Response(description="Bad Request. Invalid or missing refresh token.")
+        }
+    )
     def post(self, request):
         try:
             refresh_token = request.data["refresh_token"]

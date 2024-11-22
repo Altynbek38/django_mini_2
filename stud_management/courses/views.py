@@ -2,6 +2,8 @@ from rest_framework import generics, pagination
 from rest_framework.exceptions import PermissionDenied, NotFound, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend   
 from django.core.cache import cache
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 import logging
 import redis
 
@@ -18,6 +20,14 @@ class CourseCreateApiView(generics.CreateAPIView):
     serializer_class = CourseSerializer
     permission_classes = [isAdminPermission | isTeacherPermission]
 
+    @swagger_auto_schema(
+        operation_description="Create a new course.",
+        request_body=CourseSerializer,
+        responses={201: openapi.Response(description="Course created", schema=CourseSerializer)}
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
 course_create_view = CourseCreateApiView.as_view()
 
 
@@ -27,6 +37,13 @@ class CourseListApiView(generics.ListAPIView):
     pagination_class = pagination.LimitOffsetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['name', 'description']
+
+    @swagger_auto_schema(
+        operation_description="Retrieve a list of courses with optional filtering by name or description.",
+        responses={200: CourseSerializer(many=True)}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
 
@@ -50,6 +67,13 @@ class CourseDetailApiView(generics.RetrieveAPIView):
     serializer_class = CourseSerializer
     lookup_field = 'pk'
 
+    @swagger_auto_schema(
+        operation_description="Retrieve a detail of the course.",
+        responses={200: CourseSerializer},
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
 course_detail_view = CourseDetailApiView.as_view()
 
 
@@ -58,6 +82,14 @@ class CourseUpdateApiView(generics.UpdateAPIView):
     serializer_class = CourseSerializer
     lookup_field = 'pk'
     permission_classes = [isAdminPermission | isTeacherPermission]
+
+    @swagger_auto_schema(
+        operation_description="Update the courses.",
+        responses={200: CourseSerializer},
+        request_body=CourseSerializer
+    )
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
 
 course_update_view = CourseUpdateApiView.as_view()
 
@@ -68,12 +100,29 @@ class CourseDeleteApiView(generics.DestroyAPIView):
     lookup_field = 'pk'
     permission_classes = [isAdminPermission | isTeacherPermission]
 
+    @swagger_auto_schema(
+        operation_description="Delete the courses.",
+        responses={204: CourseSerializer},
+    )
+    def delete(self, request, *args, **kwargs):
+        return super().delete(request, *args, **kwargs)
+
+
 course_delete_view = CourseDeleteApiView.as_view()
 
 
 class EnrollmentListCreateApiView(generics.ListCreateAPIView):
     queryset = Enrollment.objects.all()
     serializer_class = EnrollmentSerializer
+
+    @swagger_auto_schema(
+        operation_description="Create an enrollment for a student in a course.",
+        request_body=EnrollmentSerializer,
+        responses={201: openapi.Response(description="Enrollment created", schema=EnrollmentSerializer)},
+        security=[{'JWT Authentication': []}]
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
     def get_queryset(self):
         user = self.request.user
@@ -118,6 +167,12 @@ class EnrollmentDetailApiView(generics.RetrieveAPIView):
     serializer_class = EnrollmentSerializer
     lookup_field = 'pk'
 
+    @swagger_auto_schema(
+        operation_description="Retrieve a detail of the enrollment.",
+        responses={200: EnrollmentSerializer}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
     def get_object(self):
         user = self.request.user
@@ -147,5 +202,12 @@ class EnrollmentDeleteApiView(generics.DestroyAPIView):
     queryset = Enrollment.objects.all()
     serializer_class = EnrollmentSerializer
     permission_classes = [isAdminPermission | isTeacherPermission]
+
+    @swagger_auto_schema(
+        operation_description="Delete the enrollment.",
+        responses={204: EnrollmentSerializer}
+    )
+    def delete(self, request, *args, **kwargs):
+        return super().delete(request, *args, **kwargs)
 
 enrollment_delete_view = EnrollmentDeleteApiView.as_view()
