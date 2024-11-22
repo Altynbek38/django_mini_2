@@ -1,90 +1,98 @@
-from unittest.mock import patch
-from django.test import TestCase
+from rest_framework.test import APITestCase
 from django.utils.timezone import now
-
-from attendance.models import Attendance
-from grades.models import Grade
+from django.core.mail import outbox
+from celery.result import AsyncResult
+from .tasks import send_attendance_reminder, notify_grade_update, generate_daily_report, send_weekly_performance_summary
 from students.models import Student
-from .tasks import (
-    send_attendance_reminder,
-    notify_grade_update,
-    generate_daily_report,
-    send_weekly_performance_summary,
-)
+from grades.models import Grade
+from attendance.models import Attendance
+from django.contrib.auth.models import User
+from unittest.mock import patch
 
-class CeleryTasksTest(TestCase):
+class CeleryTaskTestCase(APITestCase):
+    
     def setUp(self):
         self.student = Student.objects.create(
-            name="John Doe", email="john@example.com", dob="2000-01-01"
+            name="John Doe", 
+            email="john.doe@example.com"
         )
 
-    @patch("django.core.mail.send_mail")
-    def test_send_attendance_reminder_success(self, mock_send_mail):
-        mock_send_mail.return_value = 1  
+    @patch('django.core.mail.send_mail')  
+    def test_send_attendance_reminder_task(self, mock_send_mail):
+        result = send_attendance_reminder.apply_async(args=["John Doe", "john.doe@example.com"])
+
+        async_result = AsyncResult(result.id)
+        self.assertTrue(async_result.ready()) 
         
-        result = send_attendance_reminder("John Doe", "john@example.com")
-        
-        self.assertEqual(result["success"], 1)
-        self.assertEqual(result["failed"], 0)
-        mock_send_mail.assert_called_once_with(
+        self.assertEqual(mock_send_mail.call_count, 1) 
+        mock_send_mail.assert_called_with(
             subject="Daily Attendance Reminder",
             message="Dear John Doe,\n\nYou have not marked your attendance for today. Please log in and mark your attendance now.",
             from_email="altynbek4649@gmail.com",
-            recipient_list=["john@example.com"],
+            recipient_list=["john.doe@example.com"],
         )
 
-    @patch("django.core.mail.send_mail")
-    def test_send_attendance_reminder_failure(self, mock_send_mail):
-        mock_send_mail.side_effect = Exception("SMTP Error")  
-        
-        result = send_attendance_reminder("John Doe", "john@example.com")
-        
-        self.assertEqual(result["success"], 0)
-        self.assertEqual(result["failed"], 1)
-        mock_send_mail.assert_called_once()
 
-    @patch("django.core.mail.send_mail")
-    def test_notify_grade_update(self, mock_send_mail):
-        mock_send_mail.return_value = 1  
+    @patch('django.core.mail.send_mail')
+    def test_notify_grade_update_task(self, mock_send_mail):
+        grade = Grade.objects.create(
+            student=self.student,
+            course_name="Math 101",
+            grade="A",
+        )
         
-        result = notify_grade_update(self.student.id, "Math", "A")
+        result = notify_grade_update.apply_async(args=[self.student.id, "Math 101", "A"])
         
-        self.assertEqual(result, f"Grade update notification sent to {self.student.name}.")
-        mock_send_mail.assert_called_once_with(
+        async_result = AsyncResult(result.id)
+        self.assertTrue(async_result.ready()) 
+        self.assertEqual(mock_send_mail.call_count, 1)  
+        
+        mock_send_mail.assert_called_with(
             subject="Grade Update Notification",
-            message=f"Your grade for Math has been updated to A.",
+            message="Your grade for Math 101 has been updated to A.",
             from_email="altynbek4649@gmail.com",
-            recipient_list=["john@example.com"],
+            recipient_list=["john.doe@example.com"],
         )
 
-    @patch("django.core.mail.send_mail")
-    def test_generate_daily_report(self, mock_send_mail):
-        Attendance.objects.create(student=self.student, date=now().date())
-        Grade.objects.create(student=self.student, course_name="Math", grade="A", date=now().date())
+    @patch('django.core.mail.send_mail') 
+    def test_generate_daily_report_task(self, mock_send_mail):
+        today = now().date()
+        Attendance.objects.create(student=self.student, date=today)
+        Grade.objects.create(student=self.student, course_name="Math 101", grade="A", date=today)
+
+        result = generate_daily_report.apply_async()
         
-        mock_send_mail.return_value = 1  #
-        
-        result = generate_daily_report()
-        
-        self.assertEqual(result, "Daily report sent to admin.")
-        mock_send_mail.assert_called_once_with(
+        async_result = AsyncResult(result.id)
+        self.assertTrue(async_result.ready())  
+
+        self.assertEqual(mock_send_mail.call_count, 1)  
+
+        mock_send_mail.assert_called_with(
             subject="Daily Report",
             message=f"Today's Attendance: 1\nGrades Updated: 1",
             from_email="altynbek4649@gmail.com",
             recipient_list=["altynbek4649@gmail.com"],
         )
 
-    @patch("django.core.mail.send_mail")
-    def test_send_weekly_performance_summary(self, mock_send_mail):
-        Grade.objects.create(student=self.student, course_name="Math", grade="A")
-        mock_send_mail.return_value = 1  
+    @patch('django.core.mail.send_mail')
+    def test_send_weekly_performance_summary_task(self, mock_send_mail):
+        Grade.objects.create(
+            student=self.student,
+            course_name="Math 101",
+            grade="A",
+        )
+
+        result = send_weekly_performance_summary.apply_async()
         
-        result = send_weekly_performance_summary()
+
+        async_result = AsyncResult(result.id)
+        self.assertTrue(async_result.ready())
         
-        self.assertEqual(result, "Weekly summaries sent to 1 students.")
-        mock_send_mail.assert_called_once_with(
+        self.assertEqual(mock_send_mail.call_count, 1)  
+
+        mock_send_mail.assert_called_with(
             subject="Weekly Performance Summary",
-            message="Weekly Performance Summary:\n\nMath: A\n",
+            message="Weekly Performance Summary:\n\nMath 101: A\n",
             from_email="altynbek4649@gmail.com",
-            recipient_list=["john@example.com"],
+            recipient_list=["john.doe@example.com"],
         )

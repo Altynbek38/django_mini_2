@@ -39,6 +39,7 @@ student_list_view = StudentListApiView.as_view()
 class StudentDetailApiView(generics.RetrieveAPIView):
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
+    lookup_field = 'pk'
 
 student_detail_view = StudentDetailApiView.as_view()
 
@@ -49,3 +50,11 @@ class StudentUpdateApiView(generics.UpdateAPIView):
     permission_classes = [isAdminPermission | isTeacherPermission]
 
 student_update_view = StudentUpdateApiView.as_view()
+
+class StudentDeleteApiView(generics.DestroyAPIView):
+    queryset = Student.objects.all()
+    serializer_class = StudentSerializer
+    permission_classes = [isAdminPermission | isTeacherPermission]
+    lookup_field = 'pk'
+
+student_delete_view = StudentDeleteApiView.as_view()

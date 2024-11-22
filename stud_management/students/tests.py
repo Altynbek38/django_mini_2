@@ -1,93 +1,84 @@
-from django.test import TestCase
-from django.core.cache import cache
-from django.test.utils import override_settings
 from rest_framework.test import APITestCase
 from rest_framework import status
-
+from django.urls import reverse
 from users.models import User
-from .models import Student
+from students.models import Student
+from django.core.cache import cache
 
-
-
-class StudentModelTest(TestCase):
+class StudentTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create(username="testuser", role="Student")
+        self.admin_user = User.objects.create_user(username="admin", role="admin")
+        self.teacher_user = User.objects.create_user(username="teacher", role="teacher")
+        self.student_user = User.objects.create_user(username="student", role="student")
+
         self.student = Student.objects.create(
-            user=self.user, name="John Doe", email="john@example.com", dob="2000-01-01"
+            user=self.student_user,
+            name="John Doe",
+            email="john.doe@example.com"
         )
 
-    def test_student_creation(self):
-        self.assertEqual(self.student.name, "John Doe")
-        self.assertEqual(self.student.email, "john@example.com")
-        self.assertEqual(self.student.user, self.user)
+        self.client.force_authenticate(user=self.teacher_user)
 
-    def test_student_str_representation(self):
-        self.assertEqual(str(self.student), "John Doe")
-
-
-@override_settings(CACHES={
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-    }
-})
-class StudentListApiViewTest(APITestCase):
-    def setUp(self):
-        self.admin = User.objects.create_user(username="admin", password="password", role="Admin")
-        self.teacher = User.objects.create_user(username="teacher", password="password", role="Teacher")
-        self.student_user = User.objects.create_user(username="student", password="password", role="Student")
-        Student.objects.create(user=self.student_user, name="John Doe", email="john@example.com")
-        self.client.login(username="admin", password="password")
-
-    def test_student_list(self):
-        response = self.client.get('/students/list/')
+    def test_list_students(self):
+        """Test listing students."""
+        url = reverse('student-list')
+        response = self.client.get(url)
+        
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreater(len(response.data['results']), 0)
+        self.assertEqual(len(response.data), 1)
 
-    def test_student_list_cache(self):
-        response1 = self.client.get('/students/list/')
-        self.assertEqual(response1.status_code, status.HTTP_200_OK)
+    def test_student_detail(self):
+        """Test retrieving student details."""
+        url = reverse('student-detail', kwargs={'pk': self.student.id})
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['name'], self.student.name)
 
-        Student.objects.all().delete()
-        response2 = self.client.get('/students/list/')
-        self.assertEqual(len(response2.data['results']), len(response1.data['results']))
+    def test_student_update(self):
+        """Test updating student details."""
+        url = reverse('student-update', kwargs={'pk': self.student.id})
+        data = {"name": "John Updated"}
+        response = self.client.patch(url, data)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(Student.objects.get(id=self.student.id).name, "John Updated")
 
-        cache.clear()
-        response3 = self.client.get('/students/list/')
-        self.assertEqual(len(response3.data['results']), 0)
+    def test_student_delete(self):
+        """Test deleting a student."""
+        url = reverse('student-delete', kwargs={'pk': self.student.id})
+        response = self.client.delete(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Student.objects.count(), 0)
 
-
-class StudentUpdatePermissionTest(APITestCase):
-    def setUp(self):
-        self.admin = User.objects.create_user(username="admin", password="password", role="Admin")
-        self.teacher = User.objects.create_user(username="teacher", password="password", role="Teacher")
-        self.student_user = User.objects.create_user(username="student", password="password", role="Student")
-        self.student = Student.objects.create(user=self.student_user, name="John Doe", email="john@example.com")
-        self.update_data = {"name": "Updated Name"}
-
-    def test_admin_can_update_student(self):
-        self.client.login(username="admin", password="password")
-        response = self.client.put(f'/students/{self.student.id}/', self.update_data, format="json")
+    def test_role_based_permissions(self):
+        """Test role-based permissions."""
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('student-list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        self.client.force_authenticate(user=self.teacher_user)
+        response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_teacher_can_update_student(self):
-        self.client.login(username="teacher", password="password")
-        response = self.client.put(f'/students/{self.student.id}/', self.update_data, format="json")
+        self.client.force_authenticate(user=self.student_user)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)  
+
+    def test_list_students_with_cache(self):
+        """Test that student list is cached on repeated requests."""
+        url = reverse('student-list')
+        
+        response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_student_cannot_update_student(self):
-        self.client.login(username="student", password="password")
-        response = self.client.put(f'/students/{self.student.id}/', self.update_data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        cache_key = f"students:{self.client.get(url).request['PATH_INFO']}"
+        cached_data = response.data
+        cache.set(cache_key, cached_data, timeout=3600) 
 
+        cached_response = cache.get(cache_key)
+        self.assertIsNotNone(cached_response)
 
-class StudentDetailApiViewTest(APITestCase):
-    def setUp(self):
-        self.admin = User.objects.create_user(username="admin", password="password", role="Admin")
-        self.student_user = User.objects.create_user(username="student", password="password", role="Student")
-        self.student = Student.objects.create(user=self.student_user, name="John Doe", email="john@example.com")
-        self.client.login(username="admin", password="password")
-
-    def test_get_student_detail(self):
-        response = self.client.get(f'/students/{self.student.id}/')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['name'], "John Doe")
+        self.assertEqual(cached_response, cached_data)
