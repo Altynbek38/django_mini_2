@@ -7,6 +7,7 @@ from drf_yasg import openapi
 import logging
 import redis
 
+from analytics.models import CourseViewLog
 from users.permissions import isAdminPermission, isTeacherPermission
 from students.models import Student
 from .models import Course, Enrollment
@@ -72,6 +73,9 @@ class CourseDetailApiView(generics.RetrieveAPIView):
         responses={200: CourseSerializer},
     )
     def get(self, request, *args, **kwargs):
+        course = self.get_object()
+        if request.user.is_authenticated:
+            CourseViewLog.objects.create(user=request.user, course=course)
         return super().get(request, *args, **kwargs)
 
 course_detail_view = CourseDetailApiView.as_view()
